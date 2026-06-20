@@ -19,19 +19,19 @@ function LoginForm() {
     // Clear any existing session first just in case
     await supabase.auth.signOut()
 
-      const { data, error: signInError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-          queryParams: {
-            prompt: 'select_account',
-          }
-        },
-      })
+    const { data, error: signInError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          prompt: 'select_account', // Forces Google to ask which account to use
+        }
+      },
+    })
 
-    if (error) {
+    if (signInError) {
       setIsLoading(false)
-      console.error('Google login error:', error)
+      console.error('Google login error:', signInError)
     }
   }
 

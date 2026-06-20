@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase-server'
 import { redirect } from 'next/navigation'
-import { LogOut, LayoutDashboard, Layers } from 'lucide-react'
+import { LogOut, LayoutDashboard, Layers, UploadCloud } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NewDeckButton } from '@/components/NewDeckButton'
 
@@ -43,6 +43,10 @@ export default async function DashboardLayout({
            <a href="/dashboard/decks" className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-md text-sm font-medium text-gray-700">
               <Layers size={18} />
               My Decks
+           </a>
+           <a href="/dashboard/import" className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-md text-sm font-medium text-gray-700">
+              <UploadCloud size={18} />
+              Bulk Import JSON
            </a>
         </nav>
         <div className="p-4 border-t">

@@ -70,11 +70,11 @@ export function NewDeckButton({ userId }: { userId: string }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="bg-[#5e6ad2] hover:bg-[#4b54a8]">
+      <DialogTrigger>
+        <div role="button" tabIndex={0} className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-9 px-4 py-2 bg-[#5e6ad2] text-primary-foreground shadow hover:bg-[#4b54a8] text-white">
           <PlusCircle size={16} className="mr-2" />
           New Deck
-        </Button>
+        </div>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <form onSubmit={handleCreateDeck}>
@@ -107,7 +107,7 @@ export function NewDeckButton({ userId }: { userId: string }) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="prep">Prep Focus</Label>
-                <Select value={prepCategory} onValueChange={setPrepCategory}>
+                <Select value={prepCategory} onValueChange={(val) => setPrepCategory(val || 'JEE')}>
                   <SelectTrigger id="prep">
                     <SelectValue placeholder="Select" />
                   </SelectTrigger>

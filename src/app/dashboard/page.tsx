@@ -4,12 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 export default async function DashboardPage() {
   const supabase = await createClient()
   
-  // Fetch decks created by this teacher
+  // Fetch all public decks (or all decks created by any teacher)
   const { data: { user } } = await supabase.auth.getUser()
   const { data: decks, error } = await supabase
     .from('decks')
     .select('*, flashcards(count)')
-    .eq('user_id', user?.id)
     .order('created_at', { ascending: false })
 
   return (
