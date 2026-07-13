@@ -2,14 +2,25 @@ import { createClient } from '@/utils/supabase-server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
 
+type DeckSummary = {
+  id: string
+  name: string
+  description: string | null
+  prep_category: string | null
+  subject: string | null
+  is_public: boolean
+  flashcards: { count: number }[]
+}
+
 export default async function DecksListPage() {
   const supabase = await createClient()
   
-  const { data: { user } } = await supabase.auth.getUser()
   const { data: decks, error } = await supabase
     .from('decks')
     .select('*, flashcards(count)')
     .order('created_at', { ascending: false })
+
+  const rows = (decks || []) as DeckSummary[]
 
   return (
     <div className="space-y-6">
@@ -18,9 +29,11 @@ export default async function DecksListPage() {
         <p className="text-gray-500">Manage all your created flashcard decks here.</p>
       </div>
 
-      {decks && decks.length > 0 ? (
+      {error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-700">Decks could not be loaded: {error.message}</div>
+      ) : rows.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-           {decks.map((deck) => (
+           {rows.map((deck) => (
               <Link key={deck.id} href={`/dashboard/decks/${deck.id}`}>
                 <Card className="hover:border-[#5e6ad2] hover:shadow-md transition-all cursor-pointer h-full flex flex-col">
                    <CardHeader>
@@ -42,7 +55,7 @@ export default async function DecksListPage() {
         </div>
       ) : (
         <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
-           <p className="text-gray-500">You haven't created any decks yet. Click "New Deck" to get started.</p>
+           <p className="text-gray-500">No decks yet. Use New Deck to create one.</p>
         </div>
       )}
     </div>

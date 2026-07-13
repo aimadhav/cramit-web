@@ -13,7 +13,26 @@ import { Loader2, UploadCloud, AlertCircle, CheckCircle2, ArrowRight, Plus, Refr
 
 type Deck = { id: string; name: string }
 
-type PrepCategory = 'JEE' | 'NEET' | 'CS'
+type PrepCategory = 'JEE' | 'NEET' | 'Computer Science'
+
+type ImportCard = {
+  deck?: unknown
+  front?: unknown
+  question?: unknown
+  q?: unknown
+  back?: unknown
+  answer?: unknown
+  a?: unknown
+  tags?: unknown
+  frontImage?: unknown
+  front_image?: unknown
+  image?: unknown
+  imageUrl?: unknown
+  backImage?: unknown
+  back_image?: unknown
+  startingStability?: unknown
+  initial_stability?: unknown
+}
 
 type DeckResolution =
   | { action: 'map'; targetDeckId: string }
@@ -31,14 +50,14 @@ type Step = 'paste' | 'resolve' | 'importing' | 'done'
 const PREP_OPTIONS: { value: PrepCategory; label: string; subjects: string[] }[] = [
   { value: 'JEE', label: 'JEE', subjects: ['Physics', 'Chemistry', 'Mathematics'] },
   { value: 'NEET', label: 'NEET', subjects: ['Physics', 'Chemistry', 'Biology'] },
-  { value: 'CS', label: 'Computer Science', subjects: ['CS', 'Data Structures & Algorithms (DSA)', 'Object-Oriented Programming (OOP)', 'DBMS'] }
+  { value: 'Computer Science', label: 'Computer Science', subjects: ['DSA', 'DBMS', 'Operating Systems', 'OOP', 'Computer Networks'] }
 ]
 
 export function BulkImporter({ decks: initialDecks }: { decks: Deck[] }) {
   const [step, setStep] = useState<Step>('paste')
   const [jsonInput, setJsonInput] = useState('')
   const [publishImmediately, setPublishImmediately] = useState('draft')
-  const [parsedCards, setParsedCards] = useState<any[]>([])
+  const [parsedCards, setParsedCards] = useState<ImportCard[]>([])
   const [unknownEntries, setUnknownEntries] = useState<UnknownDeckEntry[]>([])
   const [results, setResults] = useState<{ success: number; failed: number; errors: string[] } | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
@@ -50,13 +69,16 @@ export function BulkImporter({ decks: initialDecks }: { decks: Deck[] }) {
 
   const handleAnalyse = () => {
     setParseError(null)
-    let parsed: any[] = []
+    let parsed: ImportCard[] = []
 
     try {
-      parsed = JSON.parse(jsonInput)
-      if (!Array.isArray(parsed)) throw new Error('JSON must be an array of card objects.')
-    } catch (e: any) {
-      setParseError(e.message)
+      const decoded: unknown = JSON.parse(jsonInput)
+      if (!Array.isArray(decoded) || decoded.some((item) => typeof item !== 'object' || item === null || Array.isArray(item))) {
+        throw new Error('JSON must be an array of card objects.')
+      }
+      parsed = decoded as ImportCard[]
+    } catch (error: unknown) {
+      setParseError(error instanceof Error ? error.message : 'The JSON could not be parsed.')
       return
     }
 
@@ -104,7 +126,7 @@ export function BulkImporter({ decks: initialDecks }: { decks: Deck[] }) {
 
   const handleConfirmAndImport = () => runImport(parsedCards, unknownEntries)
 
-  const runImport = async (cards: any[], unknowns: UnknownDeckEntry[]) => {
+  const runImport = async (cards: ImportCard[], unknowns: UnknownDeckEntry[]) => {
     setStep('importing')
     setResults(null)
 
@@ -187,8 +209,8 @@ export function BulkImporter({ decks: initialDecks }: { decks: Deck[] }) {
           return []
         }
 
-        const frontText = item.front || item.question || item.q || ''
-        const backText = item.back || item.answer || item.a || ''
+        const frontText = String(item.front || item.question || item.q || '')
+        const backText = String(item.back || item.answer || item.a || '')
 
         if (!frontText && !backText) {
           failedCount++
@@ -208,10 +230,12 @@ export function BulkImporter({ decks: initialDecks }: { decks: Deck[] }) {
         ).filter(Boolean).map((t: string) => t.trim().toLowerCase())
 
         const mediaUrls: string[] = []
-        const frontImage = item.frontImage || item.front_image || item.image || item.imageUrl
-        const backImage = item.backImage || item.back_image
+        const frontImage = String(item.frontImage || item.front_image || item.image || item.imageUrl || '')
+        const backImage = String(item.backImage || item.back_image || '')
         if (frontImage) mediaUrls[0] = frontImage
         if (backImage) { if (!frontImage) mediaUrls[0] = ''; mediaUrls[1] = backImage }
+
+        const requestedStability = Number(item.startingStability || item.initial_stability || 2.5)
 
         return [{
           id: uuidv4(),
@@ -222,7 +246,7 @@ export function BulkImporter({ decks: initialDecks }: { decks: Deck[] }) {
           back_content: backContent,
           tags_json: JSON.stringify([...new Set(tags)]),
           media_urls_json: JSON.stringify(mediaUrls),
-          starting_stability: item.startingStability || item.initial_stability || 2.5,
+          starting_stability: Number.isFinite(requestedStability) ? requestedStability : 2.5,
           status: publishImmediately,
           content_type: 'mixed',
           created_at: new Date().toISOString(),
@@ -320,7 +344,7 @@ export function BulkImporter({ decks: initialDecks }: { decks: Deck[] }) {
                 {unknownEntries.length} unknown deck{unknownEntries.length > 1 ? 's' : ''} found
               </CardTitle>
               <CardDescription className="text-amber-700">
-                These deck names in your JSON don't match any existing deck. Set up their target categorization maps below.
+                These deck names in your JSON don&apos;t match any existing deck. Set up their target categorization maps below.
               </CardDescription>
             </CardHeader>
           </Card>

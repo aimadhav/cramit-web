@@ -2,7 +2,7 @@
 
 import { useState, Suspense } from 'react'
 import { createClient } from '@/utils/supabase-client'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
@@ -19,7 +19,7 @@ function LoginForm() {
     // Clear any existing session first just in case
     await supabase.auth.signOut()
 
-    const { data, error: signInError } = await supabase.auth.signInWithOAuth({
+    const { error: signInError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,

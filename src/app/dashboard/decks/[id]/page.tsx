@@ -6,8 +6,6 @@ export default async function DeckEditorPage({ params }: { params: Promise<{ id:
   const supabase = await createClient()
   const resolvedParams = await params
   
-  // Verify the deck exists
-  const { data: { user } } = await supabase.auth.getUser()
   const { data: deck, error } = await supabase
     .from('decks')
     .select('*')

@@ -4,8 +4,6 @@ import { BulkImporter } from '@/components/BulkImporter'
 export default async function ImportPage() {
   const supabase = await createClient()
   
-  // Fetch decks so the teacher can choose which deck to import into
-  const { data: { user } } = await supabase.auth.getUser()
   const { data: decks, error } = await supabase
     .from('decks')
     .select('*')
@@ -18,7 +16,11 @@ export default async function ImportPage() {
         <p className="text-gray-500">Upload a JSON array to mass-create flashcards in your decks.</p>
       </div>
 
-      <BulkImporter decks={decks || []} />
+      {error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-700">Decks could not be loaded: {error.message}</div>
+      ) : (
+        <BulkImporter decks={decks || []} />
+      )}
     </div>
   )
 }

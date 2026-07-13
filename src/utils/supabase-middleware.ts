@@ -15,7 +15,7 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({
             request,
           })
@@ -35,54 +35,43 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const isAuthRoute = request.nextUrl.pathname.startsWith('/login')
-  const isProtected = request.nextUrl.pathname.startsWith('/dashboard') || request.nextUrl.pathname === '/'
+  const pathname = request.nextUrl.pathname
+  const isAdminRoute = pathname.startsWith('/dashboard')
+  const isTeacherRoute = pathname.startsWith('/teacher')
+  // The root route is the public product landing page. Only the login page
+  // should route an already authenticated user straight to their portal.
+  const isEntryRoute = pathname === '/login'
 
-  // Safely extract and normalize the role
-  let rawRole = 'none'
-  
-  if (user) {
-    // Check the public.users table first
-    const { data: profile } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-      
-    if (profile && profile.role) {
-      rawRole = profile.role
-    } else {
-      // Fallback to auth metadata
-      rawRole = user.user_metadata?.role || user.app_metadata?.role || 'none'
-    }
-  }
-
-  const role = String(rawRole).toLowerCase().trim()
-
-  if (isProtected && (!user || role !== 'teacher')) {
-    // If not logged in OR not a teacher, redirect to login
+  if (!user && (isAdminRoute || isTeacherRoute)) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    
-    if (user && role !== 'teacher') {
-       url.searchParams.set('error', `Access denied. Found role: "${rawRole}". You must have the "teacher" role.`)
+    url.searchParams.set('next', pathname)
+    return NextResponse.redirect(url)
+  }
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from('users')
+      .select('role,is_admin,is_premium')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const isAdmin = profile?.is_admin === true
+    const isPaidTeacher = profile?.role === 'teacher' && profile?.is_premium === true
+    const destination = isAdmin
+      ? '/dashboard'
+      : isPaidTeacher
+        ? '/teacher'
+        : profile?.role === 'teacher'
+          ? '/access-pending'
+          : '/mobile-app'
+
+    if ((isAdminRoute && !isAdmin) || (isTeacherRoute && !isAdmin && !isPaidTeacher) || isEntryRoute) {
+      const url = request.nextUrl.clone()
+      url.pathname = destination
+      url.search = ''
+      return NextResponse.redirect(url)
     }
-    
-    return NextResponse.redirect(url)
-  }
-
-  if (isAuthRoute && user && role === 'teacher') {
-     // If logged in as teacher and trying to access login page, redirect to dashboard
-     const url = request.nextUrl.clone()
-     url.pathname = '/dashboard'
-     return NextResponse.redirect(url)
-  }
-
-  // Redirect root to dashboard if logged in
-  if (request.nextUrl.pathname === '/' && user && role === 'teacher') {
-    const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
-    return NextResponse.redirect(url)
   }
 
   return supabaseResponse

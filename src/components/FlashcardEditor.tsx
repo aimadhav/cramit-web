@@ -1,6 +1,7 @@
 'use client'
+/* eslint-disable @next/next/no-img-element -- Creator preview must display arbitrary admin-supplied image URLs. */
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/utils/supabase-client'
 import { v4 as uuidv4 } from 'uuid'
 import { Button } from '@/components/ui/button'
@@ -14,20 +15,53 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Card } from '@/components/ui/card'
 import { Loader2, Plus, Save, Trash2, Smartphone } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
 
+type FlashcardRow = {
+  id: string
+  front: string
+  back: string
+  front_content: unknown
+  back_content: unknown
+  media_urls_json: string | null
+  starting_stability: number | null
+  status: string | null
+}
+
+function contentValue(content: unknown, fallback: string) {
+  try {
+    const parsed: unknown = typeof content === 'string' ? JSON.parse(content) : content
+    if (Array.isArray(parsed)) {
+      const first = parsed[0] as { value?: unknown } | undefined
+      if (typeof first?.value === 'string') return first.value
+    }
+  } catch {
+    // Fall back to the plain text columns for older cards.
+  }
+  return fallback
+}
+
+function mediaValues(value: string | null) {
+  try {
+    const parsed: unknown = JSON.parse(value || '[]')
+    if (Array.isArray(parsed)) return parsed.map((item) => typeof item === 'string' ? item : '')
+  } catch {
+    // Malformed legacy media should not break the editor.
+  }
+  return []
+}
+
 export function FlashcardEditor({ deckId }: { deckId: string }) {
-  const [cards, setCards] = useState<any[]>([])
+  const [cards, setCards] = useState<FlashcardRow[]>([])
   const [activeCardId, setActiveCardId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [isOverSafeZone, setIsOverSafeZone] = useState(false)
-  const supabase = createClient()
+  const [errorMessage, setErrorMessage] = useState('')
+  const supabase = useMemo(() => createClient(), [])
 
   // Form State
   const [front, setFront] = useState('')
@@ -38,68 +72,52 @@ export function FlashcardEditor({ deckId }: { deckId: string }) {
   const [startingStability, setStartingStability] = useState('0')
   const [status, setStatus] = useState('draft')
 
-  useEffect(() => {
-    fetchCards()
-  }, [deckId])
+  const selectCard = useCallback((card: FlashcardRow) => {
+    setActiveCardId(card.id)
+    setFront(contentValue(card.front_content, card.front || ''))
+    setBack(contentValue(card.back_content, card.back || ''))
+    const media = mediaValues(card.media_urls_json)
+    setFrontImage(media[0] || '')
+    setBackImage(media[1] || '')
+    setStartingStability(String(card.starting_stability || 0))
+    setStatus(card.status || 'draft')
+    setShowBackPreview(false)
+  }, [])
 
-  useEffect(() => {
-    // Check if content might be too long based on rough character count / images
-    // This is a heuristic approximation since we can't easily measure rendered DOM height of an iframe cross-browser
-    const contentLength = showBackPreview ? back.length : front.length;
-    const hasImage = showBackPreview ? !!backImage : !!frontImage;
-    
-    // Roughly 300 chars without image, or 100 chars with an image crosses the 380px safe zone
-    const isOver = hasImage ? contentLength > 100 : contentLength > 350;
-    setIsOverSafeZone(isOver);
-  }, [front, back, frontImage, backImage, showBackPreview])
-
-  const fetchCards = async () => {
+  const loadCards = useCallback(async () => {
     setIsLoading(true)
+    setErrorMessage('')
     const { data, error } = await supabase
       .from('flashcards')
       .select('*')
       .eq('deck_id', deckId)
       .order('created_at', { ascending: true })
 
-    if (data) {
-      setCards(data)
-      if (data.length > 0 && !activeCardId) {
-        selectCard(data[0])
-      }
+    if (error) {
+      setErrorMessage(`Cards could not be loaded: ${error.message}`)
+      setIsLoading(false)
+      return [] as FlashcardRow[]
     }
+    const rows = (data || []) as FlashcardRow[]
+    setCards(rows)
     setIsLoading(false)
-  }
+    return rows
+  }, [deckId, supabase])
 
-  const selectCard = (card: any) => {
-    setActiveCardId(card.id)
-    
-    try {
-      if (card.front_content) {
-        const parsedFront = typeof card.front_content === 'string' ? JSON.parse(card.front_content) : card.front_content
-        setFront(parsedFront?.[0]?.value || card.front || '')
-      } else {
-        setFront(card.front || '')
-      }
-
-      if (card.back_content) {
-        const parsedBack = typeof card.back_content === 'string' ? JSON.parse(card.back_content) : card.back_content
-        setBack(parsedBack?.[0]?.value || card.back || '')
-      } else {
-        setBack(card.back || '')
-      }
-    } catch {
-      setFront(card.front || '')
-      setBack(card.back || '')
+  useEffect(() => {
+    let cancelled = false
+    async function initialize() {
+      const rows = await loadCards()
+      if (!cancelled && rows[0]) selectCard(rows[0])
+      if (!cancelled && rows.length === 0) setActiveCardId(null)
     }
+    void initialize()
+    return () => { cancelled = true }
+  }, [loadCards, selectCard])
 
-    const mediaField = card.media_urls_json || card.media_urls || '[]'
-    const parsedMediaUrls = typeof mediaField === 'string' ? JSON.parse(mediaField) : mediaField
-    setFrontImage(parsedMediaUrls[0] || '')
-    setBackImage(parsedMediaUrls[1] || '')
-    
-    setStartingStability(String(card.starting_stability || 0))
-    setStatus(card.status || 'draft')
-  }
+  const previewLength = showBackPreview ? back.length : front.length
+  const previewHasImage = showBackPreview ? Boolean(backImage) : Boolean(frontImage)
+  const isOverSafeZone = previewHasImage ? previewLength > 100 : previewLength > 350
 
   const handleCreateNewCard = () => {
     setActiveCardId(null)
@@ -112,14 +130,15 @@ export function FlashcardEditor({ deckId }: { deckId: string }) {
     setShowBackPreview(false)
   }
 
-  const handleSaveCard = async (isPublishing = false) => {
+  const handleSaveCard = async (targetStatus: 'draft' | 'published') => {
     if (!front || !back) {
       alert('Front and Back content required')
       return
     }
 
     setIsSaving(true)
-    const newStatus = isPublishing ? 'published' : status;
+    setErrorMessage('')
+    const newStatus = targetStatus
     
     // We store it in the JSON array format the mobile app expects
     const frontContent = JSON.stringify([{ type: 'mixed', value: front }])
@@ -145,6 +164,8 @@ export function FlashcardEditor({ deckId }: { deckId: string }) {
       updated_at: new Date().toISOString()
     }
 
+    let savedCardId = activeCardId
+    let mutationError = ''
     if (activeCardId) {
       // Update
       const { error } = await supabase
@@ -152,14 +173,12 @@ export function FlashcardEditor({ deckId }: { deckId: string }) {
         .update(cardData)
         .eq('id', activeCardId)
         
-      if (!error) {
-         fetchCards()
-      } else {
-         alert('Failed to update')
-      }
+      if (!error) setStatus(newStatus)
+      else mutationError = `Failed to update card: ${error.message}`
     } else {
       // Insert
       const newId = uuidv4()
+      savedCardId = newId
       const { error } = await supabase
         .from('flashcards')
         .insert({
@@ -168,14 +187,14 @@ export function FlashcardEditor({ deckId }: { deckId: string }) {
           created_at: new Date().toISOString()
         })
         
-      if (!error) {
-         setActiveCardId(newId)
-         fetchCards()
-      } else {
-         alert('Failed to insert')
-      }
+      if (!error) setActiveCardId(newId)
+      else mutationError = `Failed to insert card: ${error.message}`
     }
-    
+
+    const rows = await loadCards()
+    const saved = rows.find((card) => card.id === savedCardId)
+    if (saved) selectCard(saved)
+    if (mutationError) setErrorMessage(mutationError)
     setIsSaving(false)
   }
 
@@ -184,18 +203,14 @@ export function FlashcardEditor({ deckId }: { deckId: string }) {
     const { error } = await supabase.from('flashcards').delete().eq('id', id)
     if (!error) {
       if (activeCardId === id) handleCreateNewCard()
-      fetchCards()
+      await loadCards()
+    } else {
+      setErrorMessage(`Failed to delete card: ${error.message}`)
     }
   }
 
-  const getPreviewText = (card: any) => {
-    try {
-      if (card.front_content) {
-        const parsed = typeof card.front_content === 'string' ? JSON.parse(card.front_content) : card.front_content;
-        if (parsed?.[0]?.value) return parsed[0].value;
-      }
-    } catch {}
-    return card.front || card.front_content || 'Empty Card';
+  const getPreviewText = (card: FlashcardRow) => {
+    return contentValue(card.front_content, card.front || 'Empty Card')
   }
 
   return (
@@ -215,7 +230,7 @@ export function FlashcardEditor({ deckId }: { deckId: string }) {
           ) : cards.length === 0 ? (
             <p className="text-sm text-gray-500 text-center mt-4">No cards yet</p>
           ) : (
-            cards.map((c, i) => (
+            cards.map((c) => (
               <div 
                 key={c.id}
                 onClick={() => selectCard(c)}
@@ -259,22 +274,24 @@ export function FlashcardEditor({ deckId }: { deckId: string }) {
             </div>
             <div className="flex gap-2">
                {status === 'published' && activeCardId ? (
-                 <Button onClick={() => handleSaveCard(false)} variant="outline" disabled={isSaving} className="border-amber-300 text-amber-700 hover:bg-amber-50">
+                 <Button onClick={() => handleSaveCard('draft')} variant="outline" disabled={isSaving} className="border-amber-300 text-amber-700 hover:bg-amber-50">
                     {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     Revert to Draft
                  </Button>
                ) : (
-                 <Button onClick={() => handleSaveCard(false)} variant="outline" disabled={isSaving}>
+                 <Button onClick={() => handleSaveCard('draft')} variant="outline" disabled={isSaving}>
                     {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                     Save Draft
                  </Button>
                )}
-               <Button onClick={() => handleSaveCard(true)} disabled={isSaving} className="bg-[#5e6ad2] hover:bg-[#4b54a8]">
+               <Button onClick={() => handleSaveCard('published')} disabled={isSaving} className="bg-[#5e6ad2] hover:bg-[#4b54a8]">
                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                  Publish Card
                </Button>
             </div>
           </div>
+
+          {errorMessage && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700">{errorMessage}</div>}
 
           {isOverSafeZone && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2">
@@ -338,7 +355,7 @@ export function FlashcardEditor({ deckId }: { deckId: string }) {
                 <SelectItem value="5">Easy (See later)</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-gray-500">Overrides the student's initial FSRS algorithm baseline.</p>
+            <p className="text-xs text-gray-500">Overrides the student&apos;s initial FSRS algorithm baseline.</p>
           </div>
         </div>
 
@@ -413,8 +430,6 @@ export function FlashcardEditor({ deckId }: { deckId: string }) {
             {/* Fake Mobile Navigation */}
             <div className="h-24 w-full flex justify-center items-center gap-4 shrink-0 pb-6">
                <div className="w-[50px] h-[50px] rounded-full bg-[#ff5f57] flex justify-center items-center shadow-lg"><span className="text-[9px] text-white font-bold tracking-wider">AGAIN</span></div>
-               <div className="w-[50px] h-[50px] rounded-full bg-[#ff9f0a] flex justify-center items-center shadow-lg"><span className="text-[9px] text-white font-bold tracking-wider">HARD</span></div>
-               <div className="w-[50px] h-[50px] rounded-full bg-[#4cd964] flex justify-center items-center shadow-lg"><span className="text-[9px] text-white font-bold tracking-wider">GOOD</span></div>
                <div className="w-[50px] h-[50px] rounded-full bg-[#5e6ad2] flex justify-center items-center shadow-lg"><span className="text-[9px] text-white font-bold tracking-wider">EASY</span></div>
             </div>
           </div>

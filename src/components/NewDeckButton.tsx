@@ -26,13 +26,22 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+type PrepCategory = 'JEE' | 'NEET' | 'Computer Science'
+
+const SUBJECTS: Record<PrepCategory, string[]> = {
+  JEE: ['Physics', 'Chemistry', 'Mathematics'],
+  NEET: ['Physics', 'Chemistry', 'Biology'],
+  'Computer Science': ['DSA', 'DBMS', 'Operating Systems', 'OOP', 'Computer Networks'],
+}
+
 export function NewDeckButton({ userId }: { userId: string }) {
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [prepCategory, setPrepCategory] = useState('JEE')
-  const [subject, setSubject] = useState('')
+  const [prepCategory, setPrepCategory] = useState<PrepCategory>('JEE')
+  const [subject, setSubject] = useState('Physics')
+  const [errorMessage, setErrorMessage] = useState('')
   
   const router = useRouter()
   const supabase = createClient()
@@ -40,6 +49,7 @@ export function NewDeckButton({ userId }: { userId: string }) {
   const handleCreateDeck = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setErrorMessage('')
 
     const deckId = uuidv4()
 
@@ -59,7 +69,7 @@ export function NewDeckButton({ userId }: { userId: string }) {
 
     if (error) {
       console.error('Error creating deck:', error.message)
-      alert('Failed to create deck')
+      setErrorMessage(`Failed to create deck: ${error.message}`)
     } else {
       setOpen(false)
       // Redirect to the new deck's editor
@@ -107,28 +117,30 @@ export function NewDeckButton({ userId }: { userId: string }) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="prep">Prep Focus</Label>
-                <Select value={prepCategory} onValueChange={(val) => setPrepCategory(val || 'JEE')}>
+                <Select value={prepCategory} onValueChange={(value) => {
+                  const next = (value || 'JEE') as PrepCategory
+                  setPrepCategory(next)
+                  setSubject(SUBJECTS[next][0])
+                }}>
                   <SelectTrigger id="prep">
                     <SelectValue placeholder="Select" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="JEE">JEE</SelectItem>
                     <SelectItem value="NEET">NEET</SelectItem>
-                    <SelectItem value="CS">CS / Tech</SelectItem>
+                    <SelectItem value="Computer Science">Computer Science</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="subject">Subject</Label>
-                <Input 
-                  id="subject" 
-                  placeholder="e.g. Physics" 
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  required
-                />
+                <Select value={subject} onValueChange={(value) => setSubject(value || SUBJECTS[prepCategory][0])}>
+                  <SelectTrigger id="subject" className="w-full"><SelectValue placeholder="Select subject" /></SelectTrigger>
+                  <SelectContent>{SUBJECTS[prepCategory].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
+                </Select>
               </div>
             </div>
+            {errorMessage && <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>}
           </div>
           <DialogFooter>
             <Button type="submit" className="bg-[#5e6ad2] hover:bg-[#4b54a8]" disabled={isLoading}>

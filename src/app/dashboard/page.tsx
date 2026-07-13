@@ -1,21 +1,31 @@
 import { createClient } from '@/utils/supabase-server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
+type DeckSummary = {
+  id: string
+  name: string
+  description: string | null
+  prep_category: string | null
+  subject: string | null
+  is_public: boolean
+  flashcards: { count: number }[]
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient()
   
-  // Fetch all public decks (or all decks created by any teacher)
-  const { data: { user } } = await supabase.auth.getUser()
   const { data: decks, error } = await supabase
     .from('decks')
     .select('*, flashcards(count)')
     .order('created_at', { ascending: false })
 
+  const rows = (decks || []) as DeckSummary[]
+
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-2xl font-bold tracking-tight">Welcome back</h3>
-        <p className="text-gray-500">Here's an overview of your educational content.</p>
+        <p className="text-gray-500">Here&apos;s an overview of your educational content.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -24,7 +34,7 @@ export default async function DashboardPage() {
             <CardTitle className="text-sm font-medium">Total Decks</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{decks?.length || 0}</div>
+            <div className="text-2xl font-bold">{rows.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -33,7 +43,7 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-               {decks?.reduce((acc, deck) => acc + (deck.flashcards?.[0]?.count || 0), 0) || 0}
+               {rows.reduce((acc, deck) => acc + (deck.flashcards?.[0]?.count || 0), 0)}
             </div>
           </CardContent>
         </Card>
@@ -41,9 +51,11 @@ export default async function DashboardPage() {
 
       <div className="mt-8">
         <h4 className="text-xl font-semibold mb-4">Recent Decks</h4>
-        {decks && decks.length > 0 ? (
+        {error ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-700">Content could not be loaded: {error.message}</div>
+        ) : rows.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-             {decks.slice(0, 6).map((deck) => (
+             {rows.slice(0, 6).map((deck) => (
                 <Card key={deck.id} className="hover:border-[#5e6ad2] transition-colors cursor-pointer">
                    <CardHeader>
                       <CardTitle className="text-lg">{deck.name}</CardTitle>
@@ -63,7 +75,7 @@ export default async function DashboardPage() {
           </div>
         ) : (
           <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
-             <p className="text-gray-500">You haven't created any decks yet.</p>
+             <p className="text-gray-500">No decks have been created yet.</p>
           </div>
         )}
       </div>
